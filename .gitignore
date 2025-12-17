@@ -1,0 +1,26 @@
+# Build artifacts
+runsql.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+*.o
+*.a
+bin/
+dist/
+
+# IDE
+.vscode/
+.idx/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+*.test
+coverage.out
+*.coverprofile

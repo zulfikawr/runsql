@@ -1,0 +1,178 @@
+<!doctype html>
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>RunSQL - Query Interface</title>
+    <link rel="stylesheet" href="./style.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Spline+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      rel="stylesheet"
+    />
+    <script src="./script.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div class="header-left">
+        <div class="logo-icon">
+          <span class="material-symbols-outlined">database</span>
+        </div>
+        <div class="logo-text">
+          <h1>RunSQL</h1>
+          <div class="status">
+            <span class="status-dot"></span>
+            <span class="status-text">Connected to local</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="btn-icon" id="themeToggle">
+          <span class="material-symbols-outlined">dark_mode</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="main-container">
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <h2 class="section-title">Data Source</h2>
+          <label for="fileInput" class="upload-area">
+            <div class="upload-icon">
+              <span class="material-symbols-outlined">cloud_upload</span>
+            </div>
+            <div>
+              <p class="upload-text">Upload New Data</p>
+              <p class="upload-hint">CSV, JSON, or XLSX</p>
+            </div>
+            <input type="file" id="fileInput" accept=".csv,.json,.xlsx" />
+          </label>
+        </div>
+
+        <div class="sidebar-section" id="fileInfo" style="display: none">
+          <div class="file-info">
+            <div class="file-info-content">
+              <span class="material-symbols-outlined">description</span>
+              <div class="file-details">
+                <p class="file-name" id="fileName">file.csv</p>
+                <p class="file-status" id="fileStatus">Ready</p>
+              </div>
+              <button class="btn-clear" id="clearFileBtn">
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section" style="flex: 1; padding-top: 0">
+          <div class="schema-header">
+            <h2 class="section-title" style="margin-bottom: 0">Schema</h2>
+            <span class="col-count" id="colCount">0 cols</span>
+          </div>
+          <div class="schema-list" id="schemaList">
+            <div class="schema-empty">Upload a file to see schema</div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <div class="editor-section">
+          <div class="editor-header">
+            <label class="editor-label">
+              <span class="material-symbols-outlined">terminal</span>
+              SQL EDITOR
+            </label>
+            <div class="editor-actions">
+              <button class="btn-editor-action" id="clearBtn">Clear</button>
+              <button class="btn-editor-action" id="formatBtn">Format</button>
+            </div>
+          </div>
+          <div class="editor-container">
+            <div class="editor-wrapper">
+              <div class="editor-inner">
+                <div id="highlightLayer"></div>
+                <textarea
+                  id="queryInput"
+                  placeholder="SELECT * FROM tbl LIMIT 10;"
+                  spellcheck="false"
+                ></textarea>
+              </div>
+            </div>
+            <button class="btn-run" id="runQueryBtn">
+              <span class="material-symbols-outlined">play_arrow</span>
+              Run Query
+            </button>
+            <div class="keyboard-hint">Ctrl+Enter to run</div>
+          </div>
+        </div>
+
+        <div
+          style="flex: 1; display: flex; flex-direction: column; min-height: 0"
+        >
+          <div class="results-header">
+            <div class="format-toggle">
+              <button class="format-btn active" data-format="table">
+                Table
+              </button>
+              <button class="format-btn" data-format="json">JSON</button>
+              <button class="format-btn" data-format="csv">CSV</button>
+            </div>
+            <div class="results-meta">
+              <p class="results-stats">
+                <span id="resultCount">0</span> results in
+                <span id="resultTime">0ms</span>
+              </p>
+              <div class="divider"></div>
+              <button class="btn-export" id="exportBtn">
+                <span class="material-symbols-outlined">download</span>
+                Export
+              </button>
+            </div>
+          </div>
+
+          <div class="results-container" id="resultsContainer">
+            <div class="results-empty">
+              <div class="empty-state">
+                <div class="empty-icon">
+                  <span class="material-symbols-outlined">query_stats</span>
+                </div>
+                <p class="empty-text">
+                  Upload a file and run a query to see results
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // Check server connection status every 5 seconds
+      const statusDot = document.querySelector(".status-dot");
+      const statusText = document.querySelector(".status-text");
+
+      async function checkConnection() {
+        try {
+          const response = await fetch("/health", { method: "GET" });
+          if (response.ok) {
+            statusDot.classList.add("connected");
+            statusText.textContent = "Connected to local";
+          } else {
+            statusDot.classList.remove("connected");
+            statusText.textContent = "Disconnected";
+          }
+        } catch (err) {
+          statusDot.classList.remove("connected");
+          statusText.textContent = "Disconnected";
+        }
+      }
+
+      // Check connection on load and every 5 seconds
+      checkConnection();
+      setInterval(checkConnection, 5000);
+    </script>
+  </body>
+</html>

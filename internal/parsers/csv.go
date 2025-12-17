@@ -16,6 +16,8 @@ type CSVSource struct {
 // It assumes the first row contains headers.
 func NewCSVSource(r io.Reader) (*CSVSource, error) {
 	csvReader := csv.NewReader(r)
+	// Allow variable field counts per record (some rows might have more/fewer fields)
+	csvReader.FieldsPerRecord = -1
 	
 	// Read the first row as headers
 	headers, err := csvReader.Read()
@@ -46,11 +48,9 @@ func (s *CSVSource) Read() (chan []interface{}, error) {
 				break
 			}
 			if err != nil {
-				// In a real app, we might want to send the error down a separate channel
-				// or log it. For now, we'll stop reading.
-				// Ideally, we changethe signature of Read to return (chan Row, chan error) 
-				// or generic Result type, but adhering to the interface for now.
-				break
+				// Log the error but continue reading for robustness
+				// Some CSV files may have formatting issues on certain lines
+				continue
 			}
 
 			// Convert []string to []interface{}

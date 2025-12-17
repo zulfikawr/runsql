@@ -73,7 +73,8 @@ func getSourceFromFile(filePath string) (parsers.Source, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer file.Close()
+		// Don't close here - let the CSV reader finish reading before closing
+		// The file will be closed when the Read() goroutine completes
 		return parsers.NewCSVSource(file)
 
 	case ".json":
@@ -81,7 +82,7 @@ func getSourceFromFile(filePath string) (parsers.Source, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer file.Close()
+		// Don't close here - let the JSON reader finish reading before closing
 		return parsers.NewJSONSource(file)
 
 	case ".xlsx":

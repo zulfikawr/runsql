@@ -135,6 +135,12 @@ func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
 		respondError(w, "Failed to write temp file", http.StatusInternalServerError)
 		return
 	}
+	
+	// Sync to ensure file is written to disk
+	if err := tmpF.Sync(); err != nil {
+		respondError(w, "Failed to sync temp file", http.StatusInternalServerError)
+		return
+	}
 	tmpF.Close()
 
 	// Process the file
@@ -226,6 +232,12 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := io.Copy(tmpF, file); err != nil {
 		respondError(w, "Failed to write temp file", http.StatusInternalServerError)
+		return
+	}
+	
+	// Sync to ensure file is written to disk
+	if err := tmpF.Sync(); err != nil {
+		respondError(w, "Failed to sync temp file", http.StatusInternalServerError)
 		return
 	}
 	tmpF.Close()

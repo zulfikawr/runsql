@@ -150,7 +150,11 @@ func (e *Engine) Load(tableName string, source parsers.Source) error {
 		}
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 // Query executes a SQL query and returns the results.

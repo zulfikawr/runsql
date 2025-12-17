@@ -61,6 +61,8 @@ fileInput.addEventListener("change", async (e) => {
       const data = await response.json();
 
       if (response.ok && data.status === "success") {
+        // Update filename display
+        fileNameElem.textContent = currentFile.name;
         // Update schema display
         if (data.columns) {
           schemaList.innerHTML = data.columns

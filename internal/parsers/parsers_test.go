@@ -87,7 +87,7 @@ func TestXLSXSource(t *testing.T) {
 	index, err := f.GetSheetIndex("Sheet1")
 	if err != nil {
 		// NewFile should create Sheet1
-		index = f.NewSheet("Sheet1")
+		index, _ = f.NewSheet("Sheet1")
 	}
 	f.SetActiveSheet(index)
 

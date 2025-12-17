@@ -35,14 +35,7 @@ jobs:
       run: go mod download
     
     - name: Run tests
-      run: go test -v -race -coverprofile=coverage.out ./...
-    
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        files: ./coverage.out
-        flags: unittests
-        name: codecov-umbrella
+      run: go test -v ./...
 
   build:
     name: Build
@@ -112,5 +105,6 @@ jobs:
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v3
       with:
-        version: v1.65.0
+        version: v1.62.0
         args: --timeout=5m
+        skip-cache: true

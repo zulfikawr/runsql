@@ -1,5 +1,7 @@
 # RunSQL
 
+![screenshot](./screenshot.png)
+
 A hybrid **CLI & Web tool** to run SQL queries on CSV, XLSX, and JSON files, written in Go.
 
 ---
@@ -37,9 +39,9 @@ go mod download
 
 # Build the executable
 go build -o runsql ./cmd/runsql
+# or
+go build -o runsql.exe ./cmd/runsql # for Windows
 ```
-
-On Windows, this will create `runsql.exe`.
 
 ### Pre-built Binary
 
@@ -80,7 +82,7 @@ Output:
 ```
 | industry | count |
 +----------+-------+
-| total    | 5     |
+| total    | 705     |
 ```
 
 **Example 2: Query JSON with JSON output**

@@ -6,9 +6,6 @@ let currentFile = null;
 const fileInput = document.getElementById("fileInput");
 const queryInput = document.getElementById("queryInput");
 const runQueryBtn = document.getElementById("runQueryBtn");
-const fileInfo = document.getElementById("fileInfo");
-const fileInfoDiv = document.querySelector(".file-info");
-const fileInfoContent = document.querySelector(".file-info-content");
 const schemaList = document.getElementById("schemaList");
 const clearFileBtn = document.getElementById("clearFileBtn");
 const resultsContainer = document.getElementById("resultsContainer");
@@ -16,8 +13,6 @@ const formatBtns = document.querySelectorAll(".format-btn");
 const themeToggle = document.getElementById("themeToggle");
 const clearBtn = document.getElementById("clearBtn");
 const formatBtn = document.getElementById("formatBtn");
-const fileNameElem = document.getElementById("fileName");
-const fileStatusElem = document.getElementById("fileStatus");
 
 // Theme Toggle (Header)
 themeToggle.addEventListener("click", () => {
@@ -39,19 +34,29 @@ if (document.documentElement.classList.contains("dark")) {
 }
 
 // File upload
+const revertSchemaBtn = document.getElementById("revertSchemaBtn");
+let originalSchemaData = null; // Store original schema for revert
+
+// File upload
+// File upload
 fileInput.addEventListener("change", async (e) => {
   if (e.target.files.length > 0) {
-    currentFile = e.target.files[0];
-    fileInfo.style.display = "flex";
+    const files = Array.from(e.target.files);
+    currentFile = files; // Store as array
 
-    // Show file info content during processing
-    fileInfoContent.style.display = "flex";
-    fileStatusElem.textContent = "Processing...";
+    // Reset original schema data
+    originalSchemaData = null;
+
+    // Show skeleton loading
+    renderSkeletonSchema();
+    document.getElementById("colCount").textContent = "...";
 
     // Fetch schema
     try {
       const formData = new FormData();
-      formData.append("file", currentFile);
+      files.forEach((file) => {
+        formData.append("file", file);
+      });
 
       const response = await fetch("/schema", {
         method: "POST",
@@ -61,47 +66,211 @@ fileInput.addEventListener("change", async (e) => {
       const data = await response.json();
 
       if (response.ok && data.status === "success") {
-        // Update filename display
-        fileNameElem.textContent = currentFile.name;
-        // Update schema display
-        if (data.columns) {
-          schemaList.innerHTML = data.columns
-            .map(
-              (col) => `
+        originalSchemaData = data; // Cache original schema
+        renderSchemas(data);
+      } else {
+        schemaList.innerHTML =
+          '<div class="schema-empty">Error loading schema</div>';
+      }
+    } catch (err) {
+      console.error(err);
+      schemaList.innerHTML =
+        '<div class="schema-empty">Error loading schema</div>';
+    }
+  }
+});
+
+function renderSkeletonSchema() {
+  let html = "";
+  // Show 3 skeleton groups
+  for (let i = 0; i < 3; i++) {
+    html += `
+        <div class="schema-group" style="padding: 10px;">
+            <div class="skeleton skeleton-header"></div>
+            <div class="skeleton skeleton-item"></div>
+            <div class="skeleton skeleton-item"></div>
+        </div>`;
+  }
+  schemaList.innerHTML = html;
+}
+
+function sanitizeTableName(name) {
+  let res = "";
+  for (let i = 0; i < name.length; i++) {
+    const r = name[i];
+    if (
+      (r >= "a" && r <= "z") ||
+      (r >= "A" && r <= "Z") ||
+      (r >= "0" && r <= "9") ||
+      r === "_"
+    ) {
+      res += r;
+    } else {
+      res += "_";
+    }
+  }
+  return res;
+}
+
+function getFileFormat(tableName) {
+  if (!currentFile) return "";
+  for (const file of currentFile) {
+    // Replicate logic: base -> ext -> trim -> sanitize
+    const base = file.name;
+    const lastDot = base.lastIndexOf(".");
+    let nameWithoutExt = base;
+    let ext = "";
+
+    if (lastDot !== -1) {
+      nameWithoutExt = base.substring(0, lastDot);
+      ext = base.substring(lastDot + 1).toUpperCase();
+    }
+
+    const sanitized = sanitizeTableName(nameWithoutExt);
+    if (sanitized === tableName) {
+      return ext;
+    }
+  }
+  return "";
+}
+
+function sanitizeTableName(name) {
+  let res = "";
+  for (let i = 0; i < name.length; i++) {
+    const r = name[i];
+    if (
+      (r >= "a" && r <= "z") ||
+      (r >= "A" && r <= "Z") ||
+      (r >= "0" && r <= "9") ||
+      r === "_"
+    ) {
+      res += r;
+    } else {
+      res += "_";
+    }
+  }
+  return res;
+}
+
+function getFileFormat(tableName) {
+  if (!currentFile) return "";
+  for (const file of currentFile) {
+    // Replicate logic: base -> ext -> trim -> sanitize
+    const base = file.name;
+    const lastDot = base.lastIndexOf(".");
+    let nameWithoutExt = base;
+    let ext = "";
+
+    if (lastDot !== -1) {
+      nameWithoutExt = base.substring(0, lastDot);
+      ext = base.substring(lastDot + 1).toUpperCase();
+    }
+
+    const sanitized = sanitizeTableName(nameWithoutExt);
+    if (sanitized === tableName) {
+      return ext;
+    }
+  }
+  return "";
+}
+
+function renderSchemas(data) {
+  if (!data.schemas && !data.columns) return;
+
+  // Handle query result schema (single list of columns, no table names usually provided in current backend response for query)
+  // If it's the specific format from /schema endpoint: data.schemas map
+  // If it's from /query: data.columns array
+
+  let html = "";
+  let totalCols = 0;
+
+  if (data.schemas) {
+    // Multi-table schema
+    for (const [tableName, columns] of Object.entries(data.schemas)) {
+      totalCols += columns.length;
+      const fmt = getFileFormat(tableName);
+
+      html += `
+            <div class="schema-group">
+                <div class="schema-table-header" onclick="toggleSchema(this)">
+                    <div class="schema-header-left">
+                        <span class="material-symbols-outlined schema-arrow">keyboard_arrow_down</span>
+                        <span>${escapeHtml(tableName)}</span>
+                    </div>
+                    ${fmt ? `<span class="schema-file-badge">${fmt}</span>` : ""}
+                </div>
+                <div class="schema-items-container">
+                    ${columns
+                      .map(
+                        (col) => `
                         <div class="schema-item">
                             <span class="schema-col-name">${escapeHtml(col)}</span>
                             <span class="schema-col-type">TEXT</span>
                         </div>
                     `,
-            )
-            .join("");
-          document.getElementById("colCount").textContent =
-            `${data.columns.length} cols`;
-        }
-        // Update status to ready
-        fileStatusElem.textContent = "Ready";
-      } else {
-        fileNameElem.textContent = currentFile.name;
-        fileStatusElem.textContent = "Error";
-      }
-    } catch (err) {
-      fileNameElem.textContent = currentFile.name;
-      fileStatusElem.textContent = "Error";
+                      )
+                      .join("")}
+                </div>
+            </div>`;
     }
+  } else if (data.columns) {
+    // Flat list (e.g. from query result)
+    totalCols = data.columns.length;
+    html += `
+        <div class="schema-group">
+            <div class="schema-table-header" onclick="toggleSchema(this)">
+                <div class="schema-header-left">
+                    <span class="material-symbols-outlined schema-arrow">keyboard_arrow_down</span>
+                    <span>Result Columns</span>
+                </div>
+            </div>
+            <div class="schema-items-container">
+                ${data.columns
+                  .map(
+                    (col) => `
+                    <div class="schema-item">
+                        <span class="schema-col-name">${escapeHtml(col)}</span>
+                        <span class="schema-col-type">TEXT</span>
+                    </div>
+                `,
+                  )
+                  .join("")}
+            </div>
+        </div>`;
+  }
+
+  schemaList.innerHTML = html;
+  document.getElementById("colCount").textContent = `${totalCols} cols`;
+}
+
+// Toggle collapse function (attached to window for onclick access)
+window.toggleSchema = function (header) {
+  header.classList.toggle("collapsed");
+  const container = header.nextElementSibling;
+  container.classList.toggle("collapsed");
+};
+
+// Revert schema button
+revertSchemaBtn.addEventListener("click", () => {
+  if (originalSchemaData) {
+    renderSchemas(originalSchemaData);
+    // Optional: clear result/query if desired, but user just asked to revert schema view
   }
 });
 
-clearFileBtn.addEventListener("click", () => {
-  currentFile = null;
-  fileInput.value = "";
-  fileInfo.style.display = "none";
-  fileInfoDiv.style.display = "flex";
-  schemaList.innerHTML =
-    '<div class="schema-empty">Upload a file to see schema</div>';
-  document.getElementById("colCount").textContent = "0 cols";
-  resultsContainer.innerHTML =
-    '<div class="results-empty"><div class="empty-state"><div class="empty-icon"><span class="material-symbols-outlined">query_stats</span></div><p class="empty-text">Upload a file and run a query to see results</p></div></div>';
-});
+// Clear file button (if kept, or we can just remove this logic since we hid the section)
+if (clearFileBtn) {
+  clearFileBtn.addEventListener("click", () => {
+    currentFile = null;
+    fileInput.value = "";
+    schemaList.innerHTML =
+      '<div class="schema-empty">Upload a file to see schema</div>';
+    document.getElementById("colCount").textContent = "0 cols";
+    originalSchemaData = null;
+    resultsContainer.innerHTML =
+      '<div class="results-empty"><div class="empty-state"><div class="empty-icon"><span class="material-symbols-outlined">query_stats</span></div><p class="empty-text">Upload a file and run a query to see results</p></div></div>';
+  });
+}
 
 // Clear query button
 clearBtn.addEventListener("click", () => {
@@ -159,7 +328,23 @@ function updateSQLHighlight() {
 }
 
 // Add event listeners for real-time highlighting
-queryInput.addEventListener("input", updateSQLHighlight);
+queryInput.addEventListener("input", () => {
+  updateSQLHighlight();
+
+  // Auto-revert schema if input is empty
+  if (!queryInput.value.trim()) {
+    if (originalSchemaData) {
+      renderSchemas(originalSchemaData);
+    }
+    // Reset results stats
+    document.getElementById("resultCount").textContent = "0";
+    document.getElementById("resultTime").textContent = "0ms";
+    // Reset results container to empty state if truly cleared? User didn't explicitly ask for this but "it should be back to original when the input is cleared"
+    // "also this too: 2 results in 185ms. it should be back to original when the input is cleared/or when no text in the query."
+    resultsContainer.innerHTML =
+      '<div class="results-empty"><div class="empty-state"><div class="empty-icon"><span class="material-symbols-outlined">query_stats</span></div><p class="empty-text">Upload a file and run a query to see results</p></div></div>';
+  }
+});
 queryInput.addEventListener("scroll", () => {
   highlightLayer.scrollTop = queryInput.scrollTop;
   highlightLayer.scrollLeft = queryInput.scrollLeft;
@@ -187,7 +372,7 @@ queryInput.addEventListener("keydown", (e) => {
 
 // Run query
 runQueryBtn.addEventListener("click", async () => {
-  if (!currentFile) {
+  if (!currentFile || currentFile.length === 0) {
     alert("Please upload a file first");
     return;
   }
@@ -199,14 +384,17 @@ runQueryBtn.addEventListener("click", async () => {
   }
 
   // Show processing status
-  fileStatusElem.textContent = "Processing...";
   runQueryBtn.disabled = true;
   runQueryBtn.innerHTML =
     '<span class="material-symbols-outlined" style="animation: spin 1s linear infinite;">autorenew</span>Running...';
 
   try {
     const formData = new FormData();
-    formData.append("file", currentFile);
+    // Append all files
+    currentFile.forEach((file) => {
+      formData.append("file", file);
+    });
+
     formData.append("query", query);
     formData.append("format", currentFormat);
 
@@ -219,33 +407,17 @@ runQueryBtn.addEventListener("click", async () => {
 
     if (!response.ok || data.status !== "success") {
       alert(data.error || "Query execution failed");
-      fileStatusElem.textContent = "Ready";
       return;
     }
 
     currentData = data;
-    fileStatusElem.textContent = "Ready";
 
-    // Update schema
-    if (data.columns) {
-      schemaList.innerHTML = data.columns
-        .map(
-          (col) => `
-                <div class="schema-item">
-                    <span class="schema-col-name">${escapeHtml(col)}</span>
-                    <span class="schema-col-type">TEXT</span>
-                </div>
-            `,
-        )
-        .join("");
-      document.getElementById("colCount").textContent =
-        `${data.columns.length} cols`;
-    }
+    // Update schema view to show result columns
+    renderSchemas(data);
 
     displayResults(data);
   } catch (err) {
     alert(`Error: ${err.message}`);
-    fileStatusElem.textContent = "Ready";
   } finally {
     runQueryBtn.disabled = false;
     runQueryBtn.innerHTML =
@@ -269,13 +441,33 @@ function displayResults(data) {
       });
       return obj;
     });
-    resultsContainer.innerHTML = `<pre>${escapeHtml(JSON.stringify(jsonData, null, 2))}</pre>`;
+    // Syntax Highlight JSON
+    const jsonStr = JSON.stringify(jsonData, null, 2);
+    resultsContainer.innerHTML = `<pre>${syntaxHighlightJSON(jsonStr)}</pre>`;
   } else if (currentFormat === "csv") {
-    let csv = data.columns.join(",") + "\n";
+    let csvHtml = "";
+
+    // Header
+    const headerLine = data.columns
+      .map(
+        (col, i) =>
+          `<span class="csv-col-${i % 8}">${escapeHtml(JSON.stringify(col))}</span>`,
+      )
+      .join('<span class="csv-comma">,</span>');
+    csvHtml += headerLine + "\n";
+
+    // Rows
     data.rows.forEach((row) => {
-      csv += row.map((cell) => JSON.stringify(cell)).join(",") + "\n";
+      const rowLine = row
+        .map(
+          (cell, i) =>
+            `<span class="csv-col-${i % 8}">${escapeHtml(JSON.stringify(cell))}</span>`,
+        )
+        .join('<span class="csv-comma">,</span>');
+      csvHtml += rowLine + "\n";
     });
-    resultsContainer.innerHTML = `<pre>${escapeHtml(csv)}</pre>`;
+
+    resultsContainer.innerHTML = `<pre>${csvHtml}</pre>`;
   } else {
     let html = "<table><thead><tr>";
     data.columns.forEach((col) => {
@@ -298,6 +490,34 @@ function displayResults(data) {
     html += "</tbody></table>";
     resultsContainer.innerHTML = html;
   }
+}
+
+function syntaxHighlightJSON(json) {
+  if (typeof json !== "string") {
+    json = JSON.stringify(json, undefined, 2);
+  }
+  json = json
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return json.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    function (match) {
+      var cls = "json-number";
+      if (/^"/.test(match)) {
+        if (/:$/.test(match)) {
+          cls = "json-key";
+        } else {
+          cls = "json-string";
+        }
+      } else if (/true|false/.test(match)) {
+        cls = "json-boolean";
+      } else if (/null/.test(match)) {
+        cls = "json-null";
+      }
+      return '<span class="' + cls + '">' + match + "</span>";
+    },
+  );
 }
 
 function escapeHtml(text) {

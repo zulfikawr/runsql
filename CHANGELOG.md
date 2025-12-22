@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-12-23
+
+### Added
+
+- **Multi-File Support**: Upload and query multiple files (CSV, JSON, XLSX) simultaneously
+- **JOIN Capabilities**: Execute SQL JOINs across different files (tables are named after filenames)
+- **Enhanced Web UI**:
+  - **Card Layout**: Improved schema display with collapsible cards and badges
+  - **Syntax Highlighting**: Add Rainbow CSV, and VSCode-style JSON syntax highlighting output
+  - **Skeleton Loading**: Visual feedback while loading large files
+- **CLI TUI Overhaul**:
+  - **Custom Help**: Detailed, color-coded `--help` output
+  - **Colored Output**: Status messages and table borders now use a color scheme
+
+### Changes
+
+- **API Update**: `/query` endpoint now accepts list of files instead of single file
+- **CLI**: `-f` flag now supports comma-separated paths (e.g., `-f file1.csv,file2.json`)
+
+[2.0.0]: https://github.com/zulfikawr/runsql/releases/tag/v2.0.0
+
+---
+
 ## [1.0.0] - 2025-12-17
 
 ### Added

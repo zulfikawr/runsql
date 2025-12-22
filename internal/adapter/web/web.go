@@ -24,11 +24,11 @@ type QueryRequest struct {
 
 // QueryResponse represents the response from /query
 type QueryResponse struct {
-	Status   string          `json:"status"`
-	Columns  []string        `json:"columns"`
-	Rows     [][]interface{} `json:"rows"`
-	TimeMs   int64           `json:"time_ms"`
-	Error    string          `json:"error,omitempty"`
+	Status  string          `json:"status"`
+	Columns []string        `json:"columns"`
+	Rows    [][]interface{} `json:"rows"`
+	TimeMs  int64           `json:"time_ms"`
+	Error   string          `json:"error,omitempty"`
 }
 
 // Server handles the web interface
@@ -47,7 +47,7 @@ func (s *Server) Start() error {
 	http.HandleFunc("/health", s.handleHealth)
 	http.HandleFunc("/schema", s.handleSchema)
 	http.HandleFunc("/query", s.handleQuery)
-	
+
 	// Serve static files (CSS, JS)
 	http.Handle("/style.css", http.HandlerFunc(s.handleStaticFile("style.css", "text/css")))
 	http.Handle("/script.js", http.HandlerFunc(s.handleStaticFile("script.js", "application/javascript")))
@@ -111,46 +111,15 @@ func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get file
-	file, handler, err := r.FormFile("file")
-	if err != nil {
-		respondError(w, "File is required", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-
-	// Write temp file
-	tmpDir := os.TempDir()
-	tmpFile := filepath.Join(tmpDir, handler.Filename)
-	defer os.Remove(tmpFile) // Clean up
-
-	tmpF, err := os.Create(tmpFile)
-	if err != nil {
-		respondError(w, "Failed to create temp file", http.StatusInternalServerError)
-		return
-	}
-	defer tmpF.Close()
-
-	if _, err := io.Copy(tmpF, file); err != nil {
-		respondError(w, "Failed to write temp file", http.StatusInternalServerError)
-		return
-	}
-	
-	// Sync to ensure file is written to disk
-	if err := tmpF.Sync(); err != nil {
-		respondError(w, "Failed to sync temp file", http.StatusInternalServerError)
-		return
-	}
-	tmpF.Close()
-
-	// Process the file
-	source, err := getSourceFromFile(tmpFile)
-	if err != nil {
-		respondError(w, fmt.Sprintf("Failed to parse file: %v", err), http.StatusBadRequest)
+	// Get files
+	if r.MultipartForm == nil || len(r.MultipartForm.File["file"]) == 0 {
+		respondError(w, "At least one file is required", http.StatusBadRequest)
 		return
 	}
 
-	// Create engine and load data
+	files := r.MultipartForm.File["file"]
+
+	// Create engine
 	engine, err := core.NewEngine()
 	if err != nil {
 		respondError(w, "Failed to create engine", http.StatusInternalServerError)
@@ -158,25 +127,68 @@ func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
 	}
 	defer engine.Close()
 
-	if err := engine.Load("tbl", source); err != nil {
-		respondError(w, fmt.Sprintf("Failed to load data: %v", err), http.StatusBadRequest)
-		return
+	schemas := make(map[string][]string)
+	tmpFiles := []string{}
+	defer func() {
+		for _, f := range tmpFiles {
+			os.Remove(f)
+		}
+	}()
+
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			respondError(w, fmt.Sprintf("Failed to open file %s", fileHeader.Filename), http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
+
+		// Write temp file
+		tmpDir := os.TempDir()
+		tmpFile := filepath.Join(tmpDir, fileHeader.Filename)
+		tmpFiles = append(tmpFiles, tmpFile)
+
+		tmpF, err := os.Create(tmpFile)
+		if err != nil {
+			respondError(w, "Failed to create temp file", http.StatusInternalServerError)
+			return
+		}
+
+		if _, err := io.Copy(tmpF, file); err != nil {
+			tmpF.Close()
+			respondError(w, "Failed to write temp file", http.StatusInternalServerError)
+			return
+		}
+		tmpF.Close()
+
+		// Load file
+		source, err := getSourceFromFile(tmpFile)
+		if err != nil {
+			respondError(w, fmt.Sprintf("Failed to parse file: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		tableName := getTableNameFromPath(fileHeader.Filename)
+		if err := engine.Load(tableName, source); err != nil {
+			respondError(w, fmt.Sprintf("Failed to load data: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Get schema
+		columns, _, err := engine.Query(fmt.Sprintf("SELECT * FROM %s LIMIT 0", tableName))
+		if err != nil {
+			respondError(w, fmt.Sprintf("Failed to get schema for %s: %v", tableName, err), http.StatusBadRequest)
+			return
+		}
+
+		schemas[tableName] = columns
+		fmt.Printf("[WEB] Schema loaded for: %s\n", tableName)
 	}
 
-	// Get schema by running SELECT * LIMIT 0
-	columns, _, err := engine.Query("SELECT * FROM tbl LIMIT 0")
-	if err != nil {
-		respondError(w, fmt.Sprintf("Failed to get schema: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	// Log file import
-	fmt.Printf("[WEB] File imported: %s\n", handler.Filename)
-
-	// Return schema
+	// Return schemas
 	response := map[string]interface{}{
 		"status":  "success",
-		"columns": columns,
+		"schemas": schemas,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -185,6 +197,7 @@ func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
 
 // handleQuery processes file uploads and executes SQL queries
 func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -198,13 +211,13 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get file
-	file, handler, err := r.FormFile("file")
-	if err != nil {
-		respondError(w, "File is required", http.StatusBadRequest)
+	// Get files
+	if r.MultipartForm == nil || len(r.MultipartForm.File["file"]) == 0 {
+		respondError(w, "At least one file is required", http.StatusBadRequest)
 		return
 	}
-	defer file.Close()
+
+	files := r.MultipartForm.File["file"]
 
 	// Get query
 	query := r.FormValue("query")
@@ -218,44 +231,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		format = "table"
 	}
 
-	// Write temp file
-	tmpDir := os.TempDir()
-	tmpFile := filepath.Join(tmpDir, handler.Filename)
-	defer os.Remove(tmpFile) // Clean up
-
-	tmpF, err := os.Create(tmpFile)
-	if err != nil {
-		respondError(w, "Failed to create temp file", http.StatusInternalServerError)
-		return
-	}
-	defer tmpF.Close()
-
-	if _, err := io.Copy(tmpF, file); err != nil {
-		respondError(w, "Failed to write temp file", http.StatusInternalServerError)
-		return
-	}
-	
-	// Sync to ensure file is written to disk
-	if err := tmpF.Sync(); err != nil {
-		respondError(w, "Failed to sync temp file", http.StatusInternalServerError)
-		return
-	}
-	tmpF.Close()
-
-	// Log file import
-	fmt.Printf("[WEB] File imported: %s\n", handler.Filename)
-
-	// Process the file
-	startTime := time.Now()
-
-	// Load file into engine
-	source, err := getSourceFromFile(tmpFile)
-	if err != nil {
-		respondError(w, fmt.Sprintf("Failed to parse file: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	// Create engine and load data
+	// Create engine
 	engine, err := core.NewEngine()
 	if err != nil {
 		respondError(w, "Failed to create engine", http.StatusInternalServerError)
@@ -263,9 +239,57 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	defer engine.Close()
 
-	if err := engine.Load("tbl", source); err != nil {
-		respondError(w, fmt.Sprintf("Failed to load data: %v", err), http.StatusBadRequest)
-		return
+	// Process each file
+	var loadedTables []string
+	tmpFiles := []string{}
+	defer func() {
+		for _, f := range tmpFiles {
+			os.Remove(f)
+		}
+	}()
+
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			respondError(w, fmt.Sprintf("Failed to open file %s", fileHeader.Filename), http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
+
+		// Write temp file
+		tmpDir := os.TempDir()
+		tmpFile := filepath.Join(tmpDir, fileHeader.Filename)
+		tmpFiles = append(tmpFiles, tmpFile)
+
+		tmpF, err := os.Create(tmpFile)
+		if err != nil {
+			respondError(w, "Failed to create temp file", http.StatusInternalServerError)
+			return
+		}
+
+		if _, err := io.Copy(tmpF, file); err != nil {
+			tmpF.Close()
+			respondError(w, "Failed to write temp file", http.StatusInternalServerError)
+			return
+		}
+		tmpF.Close() // Close explicitly to flush
+
+		// Load file into engine
+		source, err := getSourceFromFile(tmpFile)
+		if err != nil {
+			respondError(w, fmt.Sprintf("Failed to parse file %s: %v", fileHeader.Filename, err), http.StatusBadRequest)
+			return
+		}
+
+		// Derive table name
+		tableName := getTableNameFromPath(fileHeader.Filename)
+
+		if err := engine.Load(tableName, source); err != nil {
+			respondError(w, fmt.Sprintf("Failed to load data from %s: %v", fileHeader.Filename, err), http.StatusBadRequest)
+			return
+		}
+		loadedTables = append(loadedTables, tableName)
+		fmt.Printf("[WEB] Loaded table: %s\n", tableName)
 	}
 
 	// Execute query
@@ -357,4 +381,24 @@ func getSourceFromFile(filePath string) (parsers.Source, error) {
 	default:
 		return nil, fmt.Errorf("unsupported file type: %s", ext)
 	}
+}
+
+// getTableNameFromPath derives a table name from a file path
+func getTableNameFromPath(path string) string {
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	return sanitizeTableName(name)
+}
+
+func sanitizeTableName(name string) string {
+	var sb strings.Builder
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			sb.WriteRune(r)
+		} else {
+			sb.WriteRune('_')
+		}
+	}
+	return sb.String()
 }

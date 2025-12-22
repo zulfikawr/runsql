@@ -8,7 +8,7 @@ import (
 
 // CSVSource implements the Source interface for CSV files.
 type CSVSource struct {
-	reader *csv.Reader
+	reader  *csv.Reader
 	headers []string
 }
 
@@ -18,7 +18,7 @@ func NewCSVSource(r io.Reader) (*CSVSource, error) {
 	csvReader := csv.NewReader(r)
 	// Allow variable field counts per record (some rows might have more/fewer fields)
 	csvReader.FieldsPerRecord = -1
-	
+
 	// Read the first row as headers
 	headers, err := csvReader.Read()
 	if err != nil {

@@ -32,6 +32,7 @@ A hybrid **CLI & Web tool** to run SQL queries on CSV, XLSX, and JSON files, wri
 
 ```bash
 # Clone or download the repository
+git clone https://github.com/zulfikawr/runsql
 cd runsql
 
 # Install dependencies
@@ -63,18 +64,18 @@ Execute SQL queries directly from the terminal.
 
 #### Parameters
 
-| Flag | Description                           | Default  | Example                           |
-| ---- | ------------------------------------- | -------- | --------------------------------- |
-| `-f` | File path (CSV, XLSX, or JSON)        | Required | `-f data/sales.csv`               |
-| `-q` | SQL query                             | Required | `-q "SELECT * FROM tbl LIMIT 10"` |
-| `-o` | Output format: `table`, `json`, `csv` | `table`  | `-o json`                         |
+| Flag | Description                           | Default  | Example                             |
+| ---- | ------------------------------------- | -------- | ----------------------------------- |
+| `-f` | File path (CSV, XLSX, or JSON)        | Required | `-f data/sales.csv`                 |
+| `-q` | SQL query                             | Required | `-q "SELECT * FROM sales LIMIT 10"` |
+| `-o` | Output format: `table`, `json`, `csv` | `table`  | `-o json`                           |
 
 #### Examples
 
 **Example 1: Query CSV with table output**
 
 ```bash
-./runsql -f sample/sample.csv -q "SELECT industry, COUNT(*) as count FROM tbl WHERE level = 0 GROUP BY industry" -o table
+./runsql -f sample/sample.csv -q "SELECT industry, COUNT(*) as count FROM sample WHERE level = 0 GROUP BY industry" -o table
 ```
 
 Output:
@@ -88,7 +89,7 @@ Output:
 **Example 2: Query JSON with JSON output**
 
 ```bash
-./runsql -f sample/sample.json -q "SELECT language, COUNT(*) as users FROM tbl GROUP BY language ORDER BY users DESC" -o json
+./runsql -f sample/sample.json -q "SELECT language, COUNT(*) as users FROM sample GROUP BY language ORDER BY users DESC" -o json
 ```
 
 Output:
@@ -105,7 +106,7 @@ Output:
 **Example 3: Query with CSV output**
 
 ```bash
-./runsql -f data.csv -q "SELECT name, email FROM tbl WHERE age > 30" -o csv
+./runsql -f data.csv -q "SELECT name, email FROM data WHERE age > 30" -o csv
 ```
 
 Output:
@@ -114,6 +115,12 @@ Output:
 name,email
 John Doe,john@example.com
 Jane Smith,jane@example.com
+```
+
+**Example 4: JOIN Query (Multi-File)**
+
+```bash
+./runsql -f users.csv,orders.json -q "SELECT users.name, orders.item FROM users JOIN orders ON users.id = orders.user_id"
 ```
 
 ### Web Mode
@@ -165,20 +172,18 @@ runsql/
 │   │   ├── engine.go        # SQLite lifecycle & query execution
 │   │   ├── engine_test.go   # Unit tests
 │   │   └── infer.go         # Type inference logic
-│   └── parsers/             # File readers (Ports)
-│       ├── parser.go        # Interface definition
-│       ├── csv.go           # CSV parser
-│       ├── json.go          # JSON parser
-│       ├── xlsx.go          # Excel parser
-│       └── parsers_test.go  # Unit tests
+│   ├── parsers/             # File readers (Ports)
+│   │   ├── parser.go        # Interface definition
+│   │   ├── csv.go           # CSV parser
+│   │   ├── json.go          # JSON parser
+│   │   ├── xlsx.go          # Excel parser
+│   │   └── parsers_test.go  # Unit tests
+│   └── ui/                  # UI logic
+│       ├── colors.go        # Colors definition
 ├── web/                     # Static frontend assets
 │   ├── index.html           # Web UI
 │   ├── script.js            # JavaScript
 │   └── style.css            # Styling
-├── sample/                  # Sample data files
-│   ├── sample.csv
-│   ├── sample.json
-│   └── sample.xlsx
 ├── go.mod                   # Go module definition
 ├── go.sum                   # Go module lock file
 ├── LICENSE                  # MIT License
@@ -193,10 +198,10 @@ runsql/
 RunSQL follows the **Hexagonal Architecture (Ports & Adapters)** pattern:
 
 ```
-┌─────────────────────────────────────────┐
-│         User Interfaces                  │
-│  (CLI Adapter)  │   (Web Adapter)       │
-└────────┬────────┴────────┬──────────────┘
+┌────────────────────────────────────┐
+│         User Interfaces            │
+│  (CLI Adapter)  │   (Web Adapter)  │
+└────────┬────────┴────────┬─────────┘
          │                 │
     ┌────▼────────────────▼────┐
     │    Ports (Interfaces)    │
@@ -205,13 +210,13 @@ RunSQL follows the **Hexagonal Architecture (Ports & Adapters)** pattern:
     └────┬─────────────────┬───┘
          │                 │
     ┌────▼──────────────────▼────┐
-    │   Core Business Logic       │
-    │ - Type Inference            │
-    │ - Database Engine           │
-    │ - Query Execution           │
-    └────┬──────────────────┬─────┘
+    │   Core Business Logic      │
+    │ - Type Inference           │
+    │ - Database Engine          │
+    │ - Query Execution          │
+    └────┬─────────────────┬─────┘
          │                 │
-    ┌────▼────────────────▼────┐
+    ┌────▼─────────────────▼────┐
     │ Adapters (Implementations)│
     │ - CSV, JSON, XLSX Parsers │
     │ - SQLite Engine           │
@@ -272,62 +277,6 @@ go test -cover ./...
 
 ---
 
-## 🔍 SQL Query Examples
-
-### Basic Queries
-
-```sql
--- Select all rows
-SELECT * FROM tbl;
-
--- Select with filtering
-SELECT name, email FROM tbl WHERE age > 30;
-
--- Count records
-SELECT COUNT(*) as total FROM tbl;
-```
-
-### Aggregations
-
-```sql
--- Group by with counts
-SELECT category, COUNT(*) as count
-FROM tbl
-GROUP BY category
-ORDER BY count DESC;
-
--- Sum and average
-SELECT region, SUM(sales) as total, AVG(sales) as average
-FROM tbl
-GROUP BY region;
-```
-
-### Joins (if data allows)
-
-```sql
--- Self join on same file
-SELECT a.id, a.name, b.manager
-FROM tbl a
-LEFT JOIN tbl b ON a.id = b.id;
-```
-
-### Complex Queries
-
-```sql
--- Multi-condition filtering
-SELECT industry, size, SUM(value) as total_value
-FROM tbl
-WHERE level = 2 AND description LIKE '%debt%'
-GROUP BY industry, size
-HAVING SUM(value) > 1000
-ORDER BY total_value DESC
-LIMIT 20;
-```
-
----
-
-## 🐛 Troubleshooting
-
 ### Issue: "Column not found" error
 
 **Problem**: Query references a column that doesn't exist in the file.
@@ -383,42 +332,6 @@ sudo ./runsql -web -addr ":80"
 
 ---
 
-## 🔧 Development
-
-### Building
-
-```bash
-# Development build
-go build -o runsql ./cmd/runsql
-
-# Release build (with optimizations)
-go build -ldflags="-s -w" -o runsql ./cmd/runsql
-```
-
-### Dependencies
-
-```bash
-# View dependencies
-go mod graph
-
-# Update dependencies
-go get -u ./...
-
-# Tidy dependencies
-go mod tidy
-```
-
-### Code Structure
-
-- **`cmd/runsql/main.go`**: Entry point, routes to CLI or Web mode
-- **`internal/adapter/cli/cli.go`**: CLI flag handling and output formatting
-- **`internal/adapter/web/web.go`**: HTTP server and web handlers
-- **`internal/core/engine.go`**: SQLite database management
-- **`internal/core/infer.go`**: Type detection algorithm
-- **`internal/parsers/`**: File format parsers
-
----
-
 ## 📄 License
 
 This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file for details.
@@ -435,40 +348,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 2. **Feature Requests**: Suggest new features or improvements
 3. **Code**: Submit PRs with improvements or fixes
 4. **Documentation**: Help improve this README or add examples
-
----
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](issues)
-- **Documentation**: See [PLAN.md](PLAN.md) for detailed architecture
-- **Examples**: Check [sample/](sample/) directory for example files
-
----
-
-## 🗺️ Roadmap
-
-### Future Enhancements
-
-- [ ] Support for more file formats (Parquet, HDF5)
-- [ ] Database connections (PostgreSQL, MySQL read-only)
-- [ ] Advanced charting and visualization in web UI
-- [ ] Export results to Excel with formatting
-- [ ] Query history and saved queries
-- [ ] Docker image for easy deployment
-- [ ] API server mode for programmatic access
-
----
-
-## 📝 Version History
-
-### v1.0.0 (December 2025)
-
-- Initial release
-- CLI mode with CSV, JSON, XLSX support
-- Web mode with file upload and query interface
-- Type inference and automatic table creation
-- Multiple output formats (table, JSON, CSV)
 
 ---
 

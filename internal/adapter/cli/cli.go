@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runsql/internal/core"
 	"runsql/internal/parsers"
+	"runsql/internal/ui"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
@@ -15,42 +16,62 @@ import (
 
 // CLIConfig holds the CLI command-line arguments
 type CLIConfig struct {
-	FilePath   string // -f: File path
-	Query      string // -q: SQL query
-	OutputFmt  string // -o: Output format (table, json, csv)
+	FilePaths []string // -f: File paths (comma separated)
+	Query     string   // -q: SQL query
+	OutputFmt string   // -o: Output format (table, json, csv)
 }
 
 // Run executes the CLI workflow
 func Run(config CLIConfig) error {
 	// Validate inputs
-	if config.FilePath == "" {
+	if len(config.FilePaths) == 0 {
 		return fmt.Errorf("file path is required (-f)")
 	}
 
 	if config.Query == "" {
-		config.Query = "SELECT * FROM tbl" // Default query
+		// Default to selecting from the first table if available
+		if len(config.FilePaths) > 0 {
+			firstTable := getTableNameFromPath(config.FilePaths[0])
+			config.Query = fmt.Sprintf("SELECT * FROM %s", firstTable)
+		} else {
+			config.Query = "SELECT 1" // Fallback if no files (though validation prevents this)
+		}
 	}
 
 	if config.OutputFmt == "" {
-		config.OutputFmt = "table" // Default output format
+		config.OutputFmt = "table"
 	}
 
-	// Step 1: Detect file type and create appropriate parser
-	source, err := getSourceFromFile(config.FilePath)
-	if err != nil {
-		return fmt.Errorf("failed to parse file: %w", err)
-	}
+	// Colors
+	c := ui.Colors
 
-	// Step 2: Create engine and load data
+	// Step 1: Create engine
 	engine, err := core.NewEngine()
 	if err != nil {
 		return fmt.Errorf("failed to create engine: %w", err)
 	}
 	defer engine.Close()
 
-	err = engine.Load("tbl", source)
-	if err != nil {
-		return fmt.Errorf("failed to load data: %w", err)
+	// Step 2: Load all files
+
+	for _, path := range config.FilePaths {
+		fmt.Fprintf(os.Stderr, "%sProcessing %s%s%s...%s\n", c.Yellow, c.White, c.Bold, path, c.Reset)
+
+		// Detect file type and create appropriate parser
+		source, err := getSourceFromFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to parse file '%s': %w", path, err)
+		}
+
+		// Derive table name from filename
+		tableName := getTableNameFromPath(path)
+
+		err = engine.Load(tableName, source)
+		if err != nil {
+			return fmt.Errorf("failed to load data from '%s': %w", path, err)
+		}
+
+		fmt.Fprintf(os.Stderr, "%s✓%s Loaded '%s' as table '%s'\n", c.Green, c.Reset, path, tableName)
 	}
 
 	// Step 3: Execute query
@@ -63,6 +84,26 @@ func Run(config CLIConfig) error {
 	return formatOutput(config.OutputFmt, columns, rows)
 }
 
+// getTableNameFromPath derives a table name from a file path
+func getTableNameFromPath(path string) string {
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	return sanitizeTableName(name)
+}
+
+func sanitizeTableName(name string) string {
+	var sb strings.Builder
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			sb.WriteRune(r)
+		} else {
+			sb.WriteRune('_')
+		}
+	}
+	return sb.String()
+}
+
 // getSourceFromFile detects file type and returns appropriate parser
 func getSourceFromFile(filePath string) (parsers.Source, error) {
 	ext := strings.ToLower(filepath.Ext(filePath))
@@ -73,8 +114,6 @@ func getSourceFromFile(filePath string) (parsers.Source, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Don't close here - let the CSV reader finish reading before closing
-		// The file will be closed when the Read() goroutine completes
 		return parsers.NewCSVSource(file)
 
 	case ".json":
@@ -82,7 +121,6 @@ func getSourceFromFile(filePath string) (parsers.Source, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Don't close here - let the JSON reader finish reading before closing
 		return parsers.NewJSONSource(file)
 
 	case ".xlsx":
@@ -111,11 +149,13 @@ func formatOutput(format string, columns []string, rows [][]interface{}) error {
 	}
 }
 
-// outputTable renders results as a simple text table
+// outputTable renders results as a styled text table
 func outputTable(columns []string, rows [][]interface{}) error {
 	if len(columns) == 0 {
 		return nil
 	}
+
+	c := ui.Colors
 
 	// Calculate column widths
 	colWidths := make([]int, len(columns))
@@ -132,30 +172,36 @@ func outputTable(columns []string, rows [][]interface{}) error {
 		}
 	}
 
-	// Print header
-	fmt.Print("| ")
-	for i, col := range columns {
-		fmt.Printf("%-*s | ", colWidths[i], col)
-	}
-	fmt.Println()
-
-	// Print separator
-	fmt.Print("+")
-	for i := range columns {
-		fmt.Print(strings.Repeat("-", colWidths[i]+2))
+	// Print separator function
+	printSeparator := func() {
+		fmt.Print(c.Dim)
 		fmt.Print("+")
+		for i := range columns {
+			fmt.Print(strings.Repeat("-", colWidths[i]+2))
+			fmt.Print("+")
+		}
+		fmt.Println(c.Reset)
+	}
+
+	// Print header
+	printSeparator()
+	fmt.Print(c.Dim + "| " + c.Reset)
+	for i, col := range columns {
+		fmt.Printf("%-*s %s ", colWidths[i], c.Cyan+c.Bold+col+c.Reset, c.Dim+"|"+c.Reset)
 	}
 	fmt.Println()
+	printSeparator()
 
 	// Print rows
 	for _, row := range rows {
-		fmt.Print("| ")
+		fmt.Print(c.Dim + "| " + c.Reset)
 		for i, val := range row {
 			str := fmt.Sprintf("%v", val)
-			fmt.Printf("%-*s | ", colWidths[i], str)
+			fmt.Printf("%-*s %s ", colWidths[i], str, c.Dim+"|"+c.Reset)
 		}
 		fmt.Println()
 	}
+	printSeparator()
 
 	return nil
 }

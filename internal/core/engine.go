@@ -54,10 +54,10 @@ func (e *Engine) Load(tableName string, source parsers.Source) error {
 	// - Create Table.
 	// - Insert buffered rows.
 	// - Continue streaming the rest.
-	
+
 	const inferenceSampleSize = 100
 	var bufferedRows [][]interface{}
-	
+
 	rowCh, err := source.Read()
 	if err != nil {
 		return fmt.Errorf("failed to start reading: %w", err)
@@ -90,7 +90,7 @@ func (e *Engine) Load(tableName string, source parsers.Source) error {
 				continue
 			}
 			val := fmt.Sprintf("%v", row[colIdx]) // Convert to string for regex check
-			
+
 			if val == "" {
 				continue // Skip empty values
 			}
@@ -232,9 +232,9 @@ func buildInsertSQL(tableName string, headers []string) string {
 	for i, h := range headers {
 		quotedHeaders[i] = fmt.Sprintf(`"%s"`, h)
 	}
-	return fmt.Sprintf(`INSERT INTO "%s" (%s) VALUES (%s);`, 
-		tableName, 
-		strings.Join(quotedHeaders, ", "), 
+	return fmt.Sprintf(`INSERT INTO "%s" (%s) VALUES (%s);`,
+		tableName,
+		strings.Join(quotedHeaders, ", "),
 		strings.Join(placeholders, ", "))
 }
 

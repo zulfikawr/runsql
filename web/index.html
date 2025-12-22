@@ -15,6 +15,7 @@
     />
     <script src="./script.js" defer></script>
   </head>
+
   <body>
     <header>
       <div class="header-left">
@@ -48,29 +49,31 @@
               <p class="upload-text">Upload New Data</p>
               <p class="upload-hint">CSV, JSON, or XLSX</p>
             </div>
-            <input type="file" id="fileInput" accept=".csv,.json,.xlsx" />
+            <input
+              type="file"
+              id="fileInput"
+              accept=".csv,.json,.xlsx"
+              multiple
+            />
           </label>
-        </div>
-
-        <div class="sidebar-section" id="fileInfo" style="display: none">
-          <div class="file-info">
-            <div class="file-info-content">
-              <span class="material-symbols-outlined">description</span>
-              <div class="file-details">
-                <p class="file-name" id="fileName">file.csv</p>
-                <p class="file-status" id="fileStatus">Ready</p>
-              </div>
-              <button class="btn-clear" id="clearFileBtn">
-                <span class="material-symbols-outlined">close</span>
-              </button>
-            </div>
-          </div>
         </div>
 
         <div class="sidebar-section" style="flex: 1; padding-top: 0">
           <div class="schema-header">
             <h2 class="section-title" style="margin-bottom: 0">Schema</h2>
-            <span class="col-count" id="colCount">0 cols</span>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <span class="col-count" id="colCount">0 cols</span>
+              <button
+                class="btn-icon"
+                id="revertSchemaBtn"
+                style="width: 24px; height: 24px; padding: 0"
+                title="Revert to full schema"
+              >
+                <span class="material-symbols-outlined" style="font-size: 16px"
+                  >restart_alt</span
+                >
+              </button>
+            </div>
           </div>
           <div class="schema-list" id="schemaList">
             <div class="schema-empty">Upload a file to see schema</div>
@@ -96,7 +99,7 @@
                 <div id="highlightLayer"></div>
                 <textarea
                   id="queryInput"
-                  placeholder="SELECT * FROM tbl LIMIT 10;"
+                  placeholder="SELECT * FROM orders LIMIT 10;"
                   spellcheck="false"
                 ></textarea>
               </div>

@@ -9,8 +9,8 @@ import (
 
 // JSONSource implements the Source interface for JSON files.
 type JSONSource struct {
-	decoder *json.Decoder
-	headers []string
+	decoder  *json.Decoder
+	headers  []string
 	firstRow []interface{}
 }
 
